@@ -1,0 +1,96 @@
+variables:
+    CONTAINER_IMAGE: registry.gitlab.com/logivan_lab/$CI_PROJECT_NAME
+    BUILD_IMAGE_TAG: $CI_COMMIT_TAG
+    CONTAINER_NAME_DEV: webapp-dev
+    DEPLOYMENT_NAME_DEV: deployment/webapp-dev
+    CONTAINER_NAME_PROD: webapp-prod
+    DEPLOYMENT_NAME_PROD: deployment/webapp-prod
+    PROJECT_PATH: /var/www/$CI_PROJECT_NAME
+    VERSION_FILE_NAME: version.txt
+
+stages:
+    - Build
+    - Test
+    - Migrations
+    - Deploy
+
+before_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+
+build_dev:
+    stage: Build
+    tags:
+        - build
+    only:
+        - develop
+    script:
+        - cd $PROJECT_PATH
+        - git fetch --all && git reset --hard origin/develop
+        - touch @VERSION_FILE_NAME
+        - echo "$CI_COMMIT_SHORT_SHA - DEV - $CI_COMMIT_MESSAGE" > $VERSION_FILE_NAME
+        - cp /var/configs/.env.dev /var/www/your_repo/.env
+        - cp /var/configs/dev.config.js /var/www/your_repo/config.js
+        - docker build . -t $CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA
+        - docker tag $CI_PROJECT_NAME:$CI_COMMIT_SHORT_SHA $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA
+        - docker push $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA
+
+build_prod:
+    stage: Build
+    tags:
+        - build
+    only:
+        - tags
+    script:
+        - cd $PROJECT_PATH
+        - git fetch --all && git reset --hard origin/master
+        - touch @VERSION_FILE_NAME
+        - echo "$BUILD_IMAGE_TAG" > $VERSION_FILE_NAME
+        - cp /var/configs/.env.prod /var/www/your_repo/.env
+        - cp /var/configs/prod.config.js /var/www/your_repo/config.js
+        - docker build . -t $CI_PROJECT_NAME:$BUILD_IMAGE_TAG
+        - docker tag $CI_PROJECT_NAME:$BUILD_IMAGE_TAG $CONTAINER_IMAGE:$BUILD_IMAGE_TAG
+        - docker push $CONTAINER_IMAGE:$BUILD_IMAGE_TAG
+
+test:
+    stage: Test
+    tags:
+        - test
+    only:
+        - develop
+        - tags
+    script:
+        - echo 'Tested!'
+
+deploy_dev:
+    stage: Deploy
+    tags:
+        - deploy
+    only:
+        - develop
+    script:
+        - kubectl set image $DEPLOYMENT_NAME_DEV $CONTAINER_NAME_DEV=$CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA --record
+        - kubectl rollout restart deploy $CONTAINER_NAME_DEV
+
+migrations:
+    stage: Migrations
+    tags:
+        - deploy
+    only:
+        - tags
+    script:
+        - cp /var/configs/.env.prod /var/www/your_repo/.env
+        - cp /var/configs/prod.config.js /var/www/your_repo/config.js
+        - cd $PROJECT_PATH
+        - sequelize db:migrate
+    when: manual
+
+deploy_production:
+    stage: Deploy
+    tags:
+        - deploy
+    only:
+        - tags
+    script:
+        - kubectl set image $DEPLOYMENT_NAME_PROD $CONTAINER_NAME_PROD=$CONTAINER_IMAGE:$BUILD_IMAGE_TAG --record
+        - kubectl rollout restart deploy $CONTAINER_NAME_PROD
+    when: manual

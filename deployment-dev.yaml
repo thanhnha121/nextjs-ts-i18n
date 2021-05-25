@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: webapp-dev
+    labels:
+        app: webapp-dev    
+spec:
+    replicas: 2
+    selector:
+        matchLabels:
+            app: webapp-dev
+    template:
+        metadata:
+            labels:
+                app: webapp-dev
+        spec:
+            containers:
+                - name: webapp-dev
+                  image: registry.gitlab.com/your_username/your_repo:v1.0.0
+                  imagePullPolicy: Always
+                  ports:
+                      - containerPort: 3003
+                  readinessProbe:
+                    httpGet:
+                        path: /api/health_check
+                        port: 3003
+                    initialDelaySeconds: 20
+                    periodSeconds: 20
+                    successThreshold: 1
+            imagePullSecrets:
+                - name: regcred

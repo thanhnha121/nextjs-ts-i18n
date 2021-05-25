@@ -1,0 +1,9 @@
+{
+    "script": "npm run start",
+    "ignore_watch": [],
+    "watch_options": {
+        "followSymlinks": false
+    },
+    "name": "webapp",
+    "restart_delay": 30000
+}
